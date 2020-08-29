@@ -1,7 +1,7 @@
 
-int maxDiceCount = 30; //30 is a good balance between silly but useful quantity, and knob resolution. you want people to be able to quickly dial in values.
-int maxModifier = 30;
-int minModifier = -5; // the modifier can end up being negative in some cases.
+const int maxDiceCount = 300; //30 is a good balance between silly but useful quantity, and knob resolution. you want people to be able to quickly dial in values.
+const int maxModifier = 30;
+const int minModifier = -5; // the modifier can end up being negative in some cases.
 int presetDiceFaces[] = {
     2,
     3,
@@ -19,12 +19,12 @@ int presetDiceFaces[] = {
 }; //commonly use dice that can be used. depending on if the button used to default snapping is held, you can switch between a knob mapping function that picks these numbers of 1-maxDiceCount.
 
 //Code for dice interpretation.
-int diceCount = 3; //Number of dice to be rolled.
-int diceFace = 6; //number of faces on your dice.(this generally should be 2 or higher)
-int rollMod = 2; //how much flat value to add to the roll.
+int diceCount = 0; //Number of dice to be rolled.
+int diceFace = 0; //number of faces on your dice.(this generally should be 2 or higher)
+int rollMod = 0; //how much flat value to add to the roll.
 int currentFeat = 0; //which feature to roll the dice with. 0= standard roll. 1= keep x highest rolls. 2= keep x lowest rolls. 3= keep middlest rolls.
-int featMod = 2; //number of dice being kept for relevant features. For this number to be useful, it should between 1 diceCount-1.
-int rollResults[100]; //make an array that will hold our roll results. this will need to be the same size os the maximum dice counts. This is so that way we dont have to deal with dynamic memory.
+int featMod = 0; //number of dice being kept for relevant features. For this number to be useful, it should between 1 diceCount-1.
+int rollResults[maxDiceCount]; //make an array that will hold our roll results. this will need to be the same size os the maximum dice counts. This is so that way we dont have to deal with dynamic memory.
 String scrollableRolls = "";
 int result = 0;
 int rollNumber = 0;
@@ -281,7 +281,7 @@ void loop()
             //analogWrite(critSuccLight,255-a);
         }
         
-        rollTheDice(countKnob, faceKnob, modKnob, featKnob, keepKnob); //this writes a value to the variable "result"
+        result=rollTheDice(countKnob, faceKnob, modKnob, featKnob, keepKnob); //this writes a value to the variable "result"
         updateDisplay(); //show the world
         
         //end the effect
