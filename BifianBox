@@ -1,5 +1,5 @@
 
-const int maxDiceCount = 300; //30 is a good balance between silly but useful quantity, and knob resolution. you want people to be able to quickly dial in values.
+const int maxDiceCount = 30; //30 is a good balance between silly but useful quantity, and knob resolution. you want people to be able to quickly dial in values.
 const int maxModifier = 30;
 const int minModifier = -5; // the modifier can end up being negative in some cases.
 int presetDiceFaces[] = {
