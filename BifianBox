@@ -1,0 +1,343 @@
+
+int maxDiceCount = 30; //30 is a good balance between silly but useful quantity, and knob resolution. you want people to be able to quickly dial in values.
+int maxModifier = 30;
+int minModifier = -5; // the modifier can end up being negative in some cases.
+int presetDiceFaces[] = {
+    2,
+    3,
+    4,
+    6,
+    8,
+    10,
+    12,
+    20,
+    24,
+    32,
+    50,
+    100,
+    1000
+}; //commonly use dice that can be used. depending on if the button used to default snapping is held, you can switch between a knob mapping function that picks these numbers of 1-maxDiceCount.
+
+//Code for dice interpretation.
+int diceCount = 3; //Number of dice to be rolled.
+int diceFace = 6; //number of faces on your dice.(this generally should be 2 or higher)
+int rollMod = 2; //how much flat value to add to the roll.
+int currentFeat = 0; //which feature to roll the dice with. 0= standard roll. 1= keep x highest rolls. 2= keep x lowest rolls. 3= keep middlest rolls.
+int featMod = 2; //number of dice being kept for relevant features. For this number to be useful, it should between 1 diceCount-1.
+int rollResults[100]; //make an array that will hold our roll results. this will need to be the same size os the maximum dice counts. This is so that way we dont have to deal with dynamic memory.
+String scrollableRolls = "";
+int result = 0;
+int rollNumber = 0;
+
+int once = false;
+//input stuff;
+
+int countKnob = 0;
+int faceKnob = 0;
+int modKnob = 0;
+int featKnob = 0;
+int keepKnob = 0;
+int scrollKnob = 0;
+
+int previousCountKnob = 0;
+int previousFaceKnob = 0;
+int previousModKnob = 0;
+int previousFeatKnob = 0;
+int previouskeepKnob = 0;
+int previousScrollKnob = 0;
+
+//pin stuff
+int countKnobPin = A1;
+int faceKnobPin = A2;
+int modKnobPin = A3;
+int featKnobPin = A4;
+int keepKnobPin = A5;
+int scrollKnobPin = A0;
+
+int readyLight = 6;
+int critFailLight = 5;
+int critSuccLight = 7;
+
+int rollButton = 4;
+//All of this is for the LCD magic. this was programmed using a WH2004A-CFH-JT. This is an RGB 20x4 backlit LCD. this will allow for color effects to play for crits, and other effects.
+#include <LiquidCrystal.h>
+const int rs = 8,
+          en = 9,
+          d4 = 10,
+          d5 = 11,
+          d6 = 12,
+          d7 = 13;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+void sort(int a[], int size) //a simple sorting algorithm. Simple is good for readability. It doesnt need to be fast.
+{
+    for (int b = 0; b < (size - 1); b++)
+    {
+        for (int c = 0; c < (size - (b + 1)); c++)
+        {
+            if (a[c] > a[c + 1])
+            {
+                int t = a[c];
+                a[c] = a[c + 1];
+                a[c + 1] = t;
+            }
+        }
+    }
+}
+
+
+int rollTheDice(int count, int faces, int mod, int feat, int keep) 
+{
+   
+    int runningTotal = 0;
+    if (feat == 0) //standard roll.
+    {
+        for (int a = 0; a < count; a++) //roll all our dice
+        {
+            rollResults[a] = random(1, faces + 1); //record all our rolls
+        }
+        for (int a = 0; a < count; a++) //go through our list to gather the values in the middle.
+        {
+            runningTotal += rollResults[a];
+        }
+    }
+    if (feat == 1) //highest x rolls
+    {
+        for (int a = 0; a < count; a++) //roll all our dice
+        {
+            rollResults[a] = random(1, faces + 1); //but record them so we can show them later.
+        }
+        sort(rollResults, count); //sort that list!
+        for (int a = count - 1; a >= count - keep; a--) //go through our list to gather the highest values.
+        {
+            runningTotal += rollResults[a];
+        }
+    }
+    if (feat == 2) //middlest x rolls
+    {
+        for (int a = 0; a < count; a++) //roll all our dice
+        {
+            rollResults[a] = random(1, faces + 1); //but record them so we can show them later.
+        }
+        sort(rollResults, count); //sort that list!
+        int offset = (count - keep) * .5; //find where the chunk we want to keep is going to be int he middle of the list. due to rounding, this will favor the higher values (desireable) for instances of even chunks in odd number list sizes.
+        for (int a = offset; a < keep + offset; a++) //go through our list to gather the values in the middle.
+        {
+            runningTotal += rollResults[a];
+        }
+    }
+    if (feat == 3) //lowest x rolls
+    {
+        for (int a = 0; a < count; a++) //roll all our dice
+        {
+            rollResults[a] = random(1, faces + 1); //but record them so we can show them later.
+        }
+        sort(rollResults, count); //sort that list!
+        for (int a = 0; a < keep; a++) //go through our list to gather the lowest values.
+        {
+            runningTotal += rollResults[a];
+        }
+
+    }
+    //now we will do some work in the background to process the list of rolls into a string.
+    scrollableRolls = "";
+    for (int a = 0; a < count; a++)
+    {
+        scrollableRolls = scrollableRolls + String(rollResults[a], DEC) + ",";
+    }
+    scrollableRolls.remove(scrollableRolls.length() - 1); //this just removes that stray comma at the end.
+    runningTotal += mod; //now that we have our total, we will add the mod.
+    rollNumber++;
+    return runningTotal;
+}
+void updateDisplay()
+{
+    lcd.clear(); //clear the screen to prevent overlapping text.
+    //display the roll data
+    lcd.setCursor(0, 0); //start printing at this cursor location
+    if (modKnob >= 0)
+    {
+        lcd.print("Rolling " + String(countKnob, DEC) + "d" + String(faceKnob, DEC) + "+" + String(modKnob, DEC)); //positive mod
+    }
+    else
+    {
+        lcd.print("Rolling " + String(countKnob, DEC) + "d" + String(faceKnob, DEC) + String(modKnob, DEC)); //negative mod (the "-" is already baked into the converted string, and will look funny if it says "+-"
+    }
+    //tell the user what the feature selected is.
+    if (featKnob == 0)
+    {
+        lcd.setCursor(0, 1);
+        lcd.print("Standard Roll");
+    }
+    if (featKnob == 1)
+    {
+        lcd.setCursor(0, 1);
+        lcd.print("Keep " + String(keepKnob, DEC) + " Highest");
+    }
+    if (featKnob == 2)
+    {
+        lcd.setCursor(0, 1);
+        lcd.print("Keep " + String(keepKnob, DEC) + " Middle");
+    }
+    if (featKnob == 3)
+    {
+        lcd.setCursor(0, 1);
+        lcd.print("Keep " + String(keepKnob, DEC) + " Lowest");
+    }
+    //roll total results
+    lcd.setCursor(0, 2);
+    lcd.print("Result: " + String(result, DEC));
+    lcd.setCursor(14, 2);
+    lcd.print("#" + String(rollNumber, DEC));
+    //list our results.
+    
+    lcd.setCursor(0, 3);
+    if (scrollableRolls.length() <= 18) //if it will fit on the screen, print both of the brackets.
+    {
+        lcd.print("[" + scrollableRolls.substring(scrollKnob, scrollKnob + 18) + "]");
+    }
+    else
+    {
+        if (scrollKnob == 0) //if we are at the start of the line
+        {
+            lcd.print("[" + scrollableRolls.substring(scrollKnob, scrollKnob + 18) + (char) 126); //for your reference, char 126 and 127 are arrow characters for left and right respectivly.
+        }
+        else if (scrollKnob == scrollableRolls.length() - 18) //if we are at the end of the line
+        {
+            lcd.print((char) 127 + scrollableRolls.substring(scrollKnob, scrollKnob + 18) + "]");
+        }
+        else //middle of the line
+        {
+            lcd.print((char) 127 + scrollableRolls.substring(scrollKnob, scrollKnob + 18) + (char) 126);
+        }
+    }
+    delay(50); //this is to ensure scrolling looks nice.
+
+}
+
+void setup()
+{
+    lcd.begin(20, 4); // set up the LCD's number of columns and rows:
+    lcd.clear(); //Remove old text, just in case.
+    randomSeed(analogRead(0)); //currently there are no open pins with witch to grab noise from... oh well!
+    //Pins and Buttons made inputs.
+    pinMode(countKnobPin, INPUT);
+    pinMode(faceKnobPin, INPUT);
+    pinMode(modKnobPin, INPUT);
+    pinMode(featKnobPin, INPUT);
+    pinMode(keepKnobPin, INPUT);
+    pinMode(scrollKnobPin, INPUT);
+    pinMode(rollButton, INPUT);
+    //Lights made outputs.
+    pinMode(readyLight, OUTPUT);
+    pinMode(critFailLight, OUTPUT);
+    pinMode(critSuccLight, OUTPUT);
+}
+
+void loop()
+{
+    //shake those dice.
+    randomSeed(millis());
+    
+    //gather states  
+    countKnob = map(analogRead(countKnobPin), 0, 1000, 1, maxDiceCount); //we are using 1000 so the edges of the input are not so noisy. (deadzone)
+    faceKnob =map(analogRead(faceKnobPin), 0, 1000, 0, 12);
+    modKnob = map(analogRead(modKnobPin), 0, 1000, minModifier, maxModifier);
+    featKnob = map(analogRead(featKnobPin), 0, 1000, 0, 3);
+    keepKnob = map(analogRead(keepKnobPin), 0, 1000, 1, countKnob - 1); 
+    
+    //constrain things! This is only needed for large parameter values, where the deadzone needs to be factored in.
+    countKnob = constrain(countKnob, 1, maxDiceCount); //we are using 1000 so the edges of the input are not so noisy. (deadzone)
+    faceKnob = presetDiceFaces[constrain(faceKnob, 0, 12)];//use a list of preset dice values, and assign the data directly. Its user unfriendly to make the user scroll through 1000, or even 100 different numbers to find the most common 12.
+    modKnob = constrain(modKnob, minModifier, maxModifier);
+    featKnob = constrain(featKnob, 0, 3);//this probably doesnt need constraining but just in case!
+    keepKnob = constrain(keepKnob, 1, countKnob - 1); 
+    
+    //qualify the knobs based on other inputs.
+    if (countKnob == 1)
+    {
+        featKnob = 0; //you cant keep the highest or lowest if there's only one!
+    }
+
+    if (scrollableRolls.length() > 18) //check to see that there is enough content to scroll through.
+    {
+        scrollKnob = map(analogRead(scrollKnobPin), 0, 1024, 0, scrollableRolls.length() - 17);
+    }
+    else
+    {
+        scrollKnob = 0; //if there isnt enough data to be scrolled, then just dont!
+    }
+    if (digitalRead(rollButton) and once == false) //if it's a leading edge on the roll button being pressed.
+    {
+        digitalWrite(critSuccLight, HIGH); //we dont want to blink while rolling, so clear any remains of a critical blink
+        digitalWrite(critFailLight, HIGH);
+        digitalWrite(readyLight, LOW); //make sure this is back on.
+        
+        //play an effect. this has the bonus of actually communicating to the user that the dice are rolled. this is important to do so that if the user presses the button and they get the same result as before, they will know that the dice actually rolled)
+        for (int a = 0; a <= 255; a++)
+        {
+            delay(1);
+            analogWrite(readyLight, a);
+            //analogWrite(critSuccLight,255-a);
+        }
+        
+        rollTheDice(countKnob, faceKnob, modKnob, featKnob, keepKnob); //this writes a value to the variable "result"
+        updateDisplay(); //show the world
+        
+        //end the effect
+        for (int a = 255; a >= 0; a--)
+        {
+            analogWrite(readyLight, a);
+            //analogWrite(critSuccLight,255-a);
+            delay(1);
+        }
+        
+        once = true; 
+    }
+    if (!digitalRead(rollButton))//reset the once function once the button is let go.
+    {
+        once = false;
+    }
+    if (previousCountKnob != countKnob or previousFaceKnob != faceKnob or previousModKnob != modKnob or previousFeatKnob != featKnob or previouskeepKnob != keepKnob or previousScrollKnob != scrollKnob) //update the screen only if the user is messing with it. This reduces flicker.
+    {
+        updateDisplay();
+    }
+    //save the current states of the knobs so that we can compare them against the next frame.
+    previousCountKnob = countKnob;
+    previousFaceKnob = faceKnob;
+    previousModKnob = modKnob;
+    previousFeatKnob = featKnob;
+    previouskeepKnob = keepKnob;
+    previousScrollKnob = scrollKnob;
+    
+    //Display Candy
+    if (countKnob == 1 and rollResults[0] == 20 and faceKnob == 20 and!digitalRead(rollButton)) //if when rolling a d20, we get a crit 20, that means blink!
+    {
+        if (millis() % 500 > 250)
+        {
+            digitalWrite(critSuccLight, LOW);//turn this on (remember, the LCD takes common anode, so its backwards.)
+            digitalWrite(readyLight, HIGH); //but turn this off so that the color is clean.
+        }
+        else
+        {
+            digitalWrite(critSuccLight, HIGH);//but turn this off so that the color is clean.
+            digitalWrite(readyLight, LOW); //turn this on (remember, the LCD takes common anode, so its backwards.
+        }
+    }
+    if (countKnob == 1 and rollResults[0] == 1 and faceKnob == 20 and!digitalRead(rollButton)) //if when rolling a d20, we get a crit 1, that means blink but red!
+    {
+        if (millis() % 500 > 250)
+        {
+            digitalWrite(critFailLight, LOW);//turn this on (remember, the LCD takes common anode, so its backwards.
+            digitalWrite(readyLight, HIGH); //but turn this off so that the color is clean.
+        }
+        else
+        {
+            digitalWrite(critFailLight, HIGH);//but turn this off so that the color is clean.
+            digitalWrite(readyLight, LOW); //turn this on (remember, the LCD takes common anode, so its backwards.
+        }
+    }
+    
+}
+// to do:
+//add a cheat button controlled by a hall sensor. magnets applied in a secret location will alter luck. (this is a joke, but a fun idea for those building this)
